@@ -26,7 +26,7 @@
 1. **聚合**：并发从 `config.json` 里配置的多个上游源拉取（支持 m3u 和 `分组,#genre#` 两种格式，GitHub raw 地址自动走 jsDelivr / ghproxy 镜像兜底）。目前包含 `vbskycn/iptv`、`Guovin/iptv-api`、`ralph2009/ttvv`（IPTV.txt，4000+ 条线路，含大量地方台和港澳台）、`fanmingming` IPv6、`yuechan/Live`。
 2. **去推广**：按关键词（购物、推广、好物、欢乐购、导视、精选、秒杀、优惠、带货、试用、支持作者……）过滤频道名、分组名；`Undefined`、`Shop`、`Religious` 这类无意义分组整组丢弃；`/rtp/239.x.x.x:1025` 这种运营商内网组播代理地址也直接丢掉。
 3. **归一化**：`CCTV-1综合` / `CCTV1高清` / `cctv-1` 统一识别为同一频道，显示名统一成 `CCTV-1`；`上海｜东方卫视` 这种带省份前缀的写法会自动并到 `东方卫视`；英文分组翻译成中文分组，省名分组归入"地方频道"。
-4. **多线路**：同一个频道保留最多 `max_per_channel` 条线路，地址去重。txt 输出用 `#` 连接，播放器可自动切线路；m3u 则是同名的多条 `#EXTINF`。
+4. **多线路**：同一个频道的所有线路全部保留（`max_per_channel` 设为 `0` 不限），地址去重，能做多少条就做多少条。txt 输出用 `#` 连接，播放器可自动切线路；m3u 则是同名的多条 `#EXTINF`。
 5. **体检**：每次更新都对地址池里的每条地址发起一次真实请求（见下）。
 6. **输出**：按 fanmingming 的格式写出 M3U，附带台标和 EPG 信息。
 
@@ -99,13 +99,13 @@ schedule:
 | `filters.promo_keywords` | 出现即判为推广频道的关键词 |
 | `filters.blocked_groups` | 整组丢弃的分组名 |
 | `filters.blocked_url_patterns` | 地址正则黑名单，默认丢掉 `/rtp/239.x.x.x:1025` 这类内网组播代理 |
-| `output.max_per_channel` | 每个频道最多保留几条线路，默认 3 |
+| `output.max_per_channel` | 每个频道最多保留几条线路，`0` 表示不限（默认 0，有几条留几条） |
 | `output.txt_multi_url` | txt 里同频道多条线路用 `#` 连接（DIYP 标准写法），默认开 |
 | `output.epg` | 写入 M3U 头部的 EPG 地址 |
 | `filters.allowed_schemes` | 允许的协议，默认只留 `http`/`https`（组播 `rtp://`/`udp://` 绝大多数播放器用不了） |
 | `health.enabled` | 是否在每次更新时体检地址，默认开 |
 | `health.concurrency` / `connect_timeout` / `read_timeout` | 体检并发与超时，默认 64 / 4s / 5s |
-| `health.test_per_channel` | 每个频道最多送检几条线路（优先挑不同主机），默认 8 |
+| `health.test_per_channel` | 每个频道最多送检几条线路，`0` 表示全部送检（默认 0） |
 | `health.max_seconds` | 单次体检总时间预算，默认 1200 秒，超时就标记为未测试 |
 | `health.drop_bad` / `drop_status` | 是否丢弃明确失效（404/410/451）的地址 |
 | `fengcai.enabled` | 是否每天抓官方频道清单一并输出 |

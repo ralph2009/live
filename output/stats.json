@@ -1,32 +1,25 @@
 {
-  "updated_at": "2026-10-29 22:11:56",
-  "total_channels": 2158,
+  "updated_at": "2026-10-29 22:27:31",
+  "total_channels": 4940,
   "total_lines": 4940,
   "removed_promo": 249,
   "removed_bad_url": 36,
   "selection": {
-    "bad_lines_dropped": 589,
-    "channels_dropped": 275
+    "bad_lines_dropped": 0,
+    "channels_dropped": 0
   },
-  "health": {
-    "total": 3360,
-    "ok": 802,
-    "bad": 574,
-    "unknown": 1984,
-    "ipv6_available": false,
-    "ipv6_skipped": 414
-  },
+  "health": null,
   "groups": {
-    "地方频道": 1415,
-    "港澳台": 293,
-    "央视频道": 157,
-    "卫视频道": 112,
-    "电影频道": 56,
-    "体育频道": 30,
-    "动画频道": 30,
+    "地方频道": 2566,
+    "港澳台": 911,
+    "卫视频道": 733,
+    "央视频道": 467,
+    "电影频道": 78,
+    "体育频道": 52,
+    "动画频道": 51,
+    "经典剧场": 30,
     "纪录频道": 28,
-    "经典剧场": 22,
-    "音乐频道": 6,
+    "音乐频道": 15,
     "少儿频道": 4,
     "游戏频道": 3,
     "数字频道": 2

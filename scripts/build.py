@@ -410,10 +410,13 @@ def build_entries(cfg: dict):
 
 
 def build_pool(candidates: dict, cfg: dict):
-    """挑出要送去体检的地址：每个频道最多 test_per_channel 条，优先照顾不同主机，避免全压在同一个 CDN 上。"""
-    per = int((cfg.get("health") or {}).get("test_per_channel", 8) or 8)
+    """挑出要送去体检的地址：默认全部送检；test_per_channel 大于 0 时每台限量，并优先照顾不同主机。"""
+    per = int((cfg.get("health") or {}).get("test_per_channel", 0) or 0)
     pool = []
     for key, cands in candidates.items():
+        if per <= 0:
+            pool.extend(cands)
+            continue
         chosen, hosts = [], set()
         for c in cands:                      # 第一轮：每个主机各取一条
             host = (re.sub(r"^https?://", "", c["url"]).split("/")[0]).lower()
@@ -436,7 +439,7 @@ def build_pool(candidates: dict, cfg: dict):
 def select_entries(candidates: dict, cfg: dict, health: dict):
     """结合体检结果挑最终线路：能用(ok) > 未确认(unknown/未测) > 失效(bad，默认丢弃)。"""
     hcfg = cfg.get("health") or {}
-    max_per = int(cfg["output"].get("max_per_channel", 1) or 1)
+    max_per = int(cfg["output"].get("max_per_channel", 0) or 0)   # 0 或负数 = 不限线路数
     drop_bad = bool(hcfg.get("drop_bad", True))
 
     def rank(url):
@@ -466,7 +469,7 @@ def select_entries(candidates: dict, cfg: dict, health: dict):
         scored.sort(key=lambda x: (-x[0], x[1]["priority"],
                                    -quality_score(x[1]["name"] + " " + x[1].get("tvg_name", ""))))
         picked = []
-        for r, c, label in scored[:max_per]:
+        for r, c, label in (scored if max_per <= 0 else scored[:max_per]):
             c = dict(c)
             c["health"] = label
             picked.append(c)

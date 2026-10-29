@@ -5,7 +5,7 @@
     "stats": "output/stats.json",
     "epg": "https://live.fanmingming.cn/e.xml",
     "logo_base": "https://live.fanmingming.cn/tv/",
-    "max_per_channel": 3,
+    "max_per_channel": 0,
     "txt_multi_url": true,
     "include_tvg_id": true
   },
@@ -14,10 +14,14 @@
     "concurrency": 64,
     "connect_timeout": 4,
     "read_timeout": 5,
-    "test_per_channel": 8,
-    "max_seconds": 1200,
+    "test_per_channel": 0,
+    "max_seconds": 1800,
     "drop_bad": true,
-    "drop_status": [404, 410, 451],
+    "drop_status": [
+      404,
+      410,
+      451
+    ],
     "skip_ipv6_without_network": true,
     "output": "output/health.json",
     "summary": "output/health-summary.json"
