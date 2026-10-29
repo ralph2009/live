@@ -62,7 +62,11 @@
       "^\\s*$",
       "^\\d+$"
     ],
-    "keep_foreign": true
+    "keep_foreign": true,
+    "allowed_schemes": [
+      "http",
+      "https"
+    ]
   },
   "sources": [
     {
@@ -70,6 +74,12 @@
       "url": "https://raw.githubusercontent.com/vbskycn/iptv/master/tv/iptv4.m3u",
       "enabled": true,
       "priority": 1
+    },
+    {
+      "name": "guovin-iptv-api",
+      "url": "https://raw.githubusercontent.com/Guovin/iptv-api/gd/output/result.m3u",
+      "enabled": true,
+      "priority": 2
     },
     {
       "name": "fanmingming-ipv4",
@@ -81,13 +91,13 @@
       "name": "fanmingming-ipv6",
       "url": "https://raw.githubusercontent.com/fanmingming/live/main/tv/m3u/ipv6.m3u",
       "enabled": true,
-      "priority": 3
+      "priority": 8
     },
     {
       "name": "yuechan-live",
       "url": "https://raw.githubusercontent.com/yuechan/Live/main/IPTV.m3u",
       "enabled": true,
-      "priority": 4
+      "priority": 6
     },
     {
       "name": "iptv-org-cn",

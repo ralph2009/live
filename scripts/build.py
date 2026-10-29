@@ -237,8 +237,11 @@ def channel_key(name: str, tvg_name: str = "") -> str:
     return base.upper()
 
 
+GROUP_EMOJI_RE = re.compile(r"^[^0-9A-Za-z\u4e00-\u9fa5]+")
+
+
 def normalize_group(group: str, name: str) -> str:
-    g = group.strip()
+    g = GROUP_EMOJI_RE.sub("", group.strip()).replace("·", "").strip()
     if not g:
         g = "其他频道"
     low = g.lower()
@@ -329,9 +332,13 @@ def build_entries(cfg: dict):
     log(f"\n[汇总] 原始条目 {len(all_entries)} 条")
 
     # 1) 过滤推广 / 无效
+    allowed_schemes = tuple(filters.get("allowed_schemes", ("http", "https")))
     kept, removed_promo = [], 0
     for e in all_entries:
         if not e["name"] or not e["url"]:
+            continue
+        if not e["url"].lower().startswith(allowed_schemes):
+            removed_promo += 1
             continue
         if is_promo(e, filters):
             removed_promo += 1
