@@ -43,7 +43,11 @@
       "九块九",
       "包邮",
       "返利",
-      "优惠券"
+      "优惠券",
+      "随心看",
+      "欢乐生活",
+      "热门推荐",
+      "好物推荐"
     ],
     "blocked_groups": [
       "更新时间",
@@ -105,5 +109,11 @@
       "enabled": false,
       "priority": 9
     }
-  ]
+  ],
+  "fengcai": {
+    "enabled": true,
+    "url": "http://tvlive.fengcaizb.com/channels/gqds3.gz",
+    "output_json": "output/channel-catalog.json",
+    "output_txt": "output/channel-catalog.txt"
+  }
 }

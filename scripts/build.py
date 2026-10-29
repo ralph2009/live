@@ -428,6 +428,73 @@ def write_txt(entries, path):
         f.write("\n".join(lines) + "\n")
 
 
+def build_channel_catalog(cfg: dict, filters: dict) -> dict:
+    """抓「高清电视」App 的官方频道包，去掉推广台，只保留频道清单（该包的播放地址是加密令牌，无法转成标准 m3u）。"""
+    fc = cfg.get("fengcai") or {}
+    if not fc.get("enabled"):
+        return {}
+
+    req = urllib.request.Request(fc["url"], headers={"User-Agent": UA, "Accept-Encoding": "gzip"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        raw = resp.read()
+    if raw[:2] == b"\x1f\x8b":
+        raw = gzip.decompress(raw)
+    data = json.loads(raw.decode("utf-8", "ignore"))
+    items = data.get("data") or []
+
+    promo_kw = list(filters.get("promo_keywords", []))
+    blocked = list(filters.get("blocked_groups", []))
+    kept, removed = [], []
+    for it in items:
+        title = (it.get("title") or "").strip()
+        group = (it.get("province") or "").strip() or "其他频道"
+        if not title:
+            continue
+        if any(k in title or k in group for k in promo_kw) or any(b and b in group for b in blocked):
+            removed.append({"title": title, "group": group})
+            continue
+        kept.append({"title": title, "group": group, "num": it.get("num"),
+                     "id": it.get("id")})
+
+    order = {g: i for i, g in enumerate(GROUP_ORDER)}
+    kept.sort(key=lambda x: (order.get(x["group"], len(GROUP_ORDER)), str(x["num"]).zfill(4)))
+
+    groups = {}
+    for c in kept:
+        groups[c["group"]] = groups.get(c["group"], 0) + 1
+
+    result = {
+        "updated_at": now_cn(),
+        "source": fc["url"],
+        "total_raw": len(items),
+        "total_kept": len(kept),
+        "removed_promo": len(removed),
+        "groups": groups,
+        "removed_samples": [r["title"] for r in removed[:20]],
+        "channels": kept,
+    }
+
+    out_json = fc.get("output_json", "output/channel-catalog.json")
+    os.makedirs(os.path.dirname(out_json) or ".", exist_ok=True)
+    with open(out_json, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
+
+    out_txt = fc.get("output_txt", "output/channel-catalog.txt")
+    lines = [f"官方频道清单（已去推广台）  更新时间：{result['updated_at']}",
+             f"原始 {len(items)} 个频道，保留 {len(kept)} 个，剔除推广 {len(removed)} 个", ""]
+    current = None
+    for c in kept:
+        if c["group"] != current:
+            current = c["group"]
+            lines.append(f"\n【{current}】")
+        lines.append(f'  {c["title"]}')
+    with open(out_txt, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(lines) + "\n")
+
+    log(f"[清单] 官方频道包 {len(items)} 条 -> 保留 {len(kept)} 条, 剔除推广 {len(removed)} 条 -> {out_json}")
+    return result
+
+
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     os.chdir(root)
@@ -438,6 +505,12 @@ def main():
     if not entries:
         log("[错误] 没有可用频道，保留上一次的输出文件不动")
         return 1
+
+    catalog = {}
+    try:
+        catalog = build_channel_catalog(cfg, cfg["filters"])
+    except Exception as e:  # noqa: BLE001 官方清单拉取失败不影响主列表
+        log(f"[清单] 官方频道包拉取失败: {e}")
 
     groups = {}
     for e in entries:
@@ -453,6 +526,7 @@ def main():
         "removed_promo": removed,
         "groups": dict(sorted(groups.items(), key=lambda kv: -kv[1])),
         "sources": source_stats,
+        "catalog": {k: catalog.get(k) for k in ("total_raw", "total_kept", "removed_promo", "groups")} if catalog else None,
     }
     with open(cfg["output"]["stats"], "w", encoding="utf-8", newline="\n") as f:
         json.dump(stats, f, ensure_ascii=False, indent=2)

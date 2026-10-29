@@ -53,6 +53,17 @@ schedule:
 
 也可以在 Actions 页面点 **Run workflow** 手动立刻跑一次。每次运行结果会写进 `output/stats.json`，同时显示在 Actions 的运行摘要里。
 
+## 附带：官方频道清单（去推广）
+
+除了可播放的 M3U，每天还会抓一份「高清电视」类 App 的官方频道包（`tvlive.fengcaizb.com/channels/gqds3.gz`，1759 个频道），把购物/推广台剔除后存成清单：
+
+| 文件 | 内容 |
+| --- | --- |
+| `output/channel-catalog.json` | 频道名 + 分组 + 排序号，含剔除统计 |
+| `output/channel-catalog.txt` | 按分组排好的人读版 |
+
+> 该频道包里的播放地址是服务端加密令牌（`urls` 字段），只有它自己的 App 能解析，因此清单**不能转成可播放的 M3U**，仅作频道对照/整理用。想要能播的列表，用上面的 `output/live.m3u`。
+
 ## 配置
 
 `config.json`：
@@ -66,6 +77,8 @@ schedule:
 | `filters.blocked_groups` | 整组丢弃的分组名 |
 | `output.max_per_channel` | 每个频道保留几条线路，默认 1 |
 | `output.epg` | 写入 M3U 头部的 EPG 地址 |
+| `filters.allowed_schemes` | 允许的协议，默认只留 `http`/`https`（组播 `rtp://`/`udp://` 绝大多数播放器用不了） |
+| `fengcai.enabled` | 是否每天抓官方频道清单一并输出 |
 
 新增一个源，只要往 `sources` 里加一条，提交后 Action 会自动跑一次。
 
