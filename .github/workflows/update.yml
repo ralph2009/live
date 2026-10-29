@@ -50,6 +50,18 @@ jobs:
             git push
           fi
 
+      - name: 刷新 jsDelivr 缓存
+        if: success()
+        run: |
+          files="live.m3u live.txt cctv-sat.m3u cctv-sat.txt channel-catalog.json channel-catalog.txt stats.json"
+          for i in 1 2 3; do
+            for f in $files; do
+              curl -s -m 20 "https://purge.jsdelivr.net/gh/ralph2009/live@main/output/$f" > /dev/null || true
+            done
+            # jsDelivr 的新提交镜像有几分钟延迟，等一会儿再补刷
+            [ "$i" = "3" ] || sleep 90
+          done
+
       - name: 写入运行摘要
         if: always()
         run: |
