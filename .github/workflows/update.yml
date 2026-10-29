@@ -2,8 +2,9 @@ name: 更新直播源
 
 on:
   schedule:
-    # 每天北京时间 04:00 自动更新（GitHub 用 UTC，20:00 UTC = 次日 04:00 北京时间）
-    - cron: "0 20 * * *"
+    # 每天北京时间 04:21 自动更新（GitHub 用 UTC，20:21 UTC = 次日 04:21 北京时间）。
+    # 特意错开整点：GitHub 整点的 cron 高峰负载大，任务经常被延迟甚至跳过。
+    - cron: "21 20 * * *"
   workflow_dispatch:        # 支持在 Actions 页面手动点一下立即更新
   push:
     branches: [main]

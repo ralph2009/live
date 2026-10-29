@@ -293,8 +293,13 @@ def load_tvbox_lives(source: dict, urls=None):
         except Exception as e:  # noqa: BLE001
             log(f"[接口] {candidate} 拉取失败: {str(e)[:80]}")
             continue
-        if not raw.startswith("{"):
-            log(f"[接口] {candidate} 不是 JSON 配置（可能被加密或反爬），跳过")
+        head = raw[:400]
+        if not head.lstrip().startswith("{") and "{" not in head:
+            kind = "图片/网页占位内容" if (head.startswith("<") or "\ufffd" in head or not head.strip()) else "非 JSON"
+            log(f"[接口] {candidate} 返回的是{kind}（上游维护、反爬或已换域名），跳过")
+            continue
+        if not raw.lstrip().startswith("{"):
+            log(f"[接口] {candidate} 不是 JSON 配置（可能被加密），跳过")
             continue
         try:
             data = json.loads(raw)
