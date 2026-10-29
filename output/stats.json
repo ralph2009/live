@@ -1,21 +1,35 @@
 {
-  "updated_at": "2026-10-29 21:40:50",
-  "total_channels": 704,
-  "removed_promo": 202,
+  "updated_at": "2026-10-29 22:11:56",
+  "total_channels": 2158,
+  "total_lines": 4940,
+  "removed_promo": 249,
+  "removed_bad_url": 36,
+  "selection": {
+    "bad_lines_dropped": 589,
+    "channels_dropped": 275
+  },
+  "health": {
+    "total": 3360,
+    "ok": 802,
+    "bad": 574,
+    "unknown": 1984,
+    "ipv6_available": false,
+    "ipv6_skipped": 414
+  },
   "groups": {
-    "地方频道": 492,
-    "卫视频道": 44,
-    "央视频道": 40,
-    "电影频道": 35,
-    "纪录频道": 25,
-    "港澳台": 17,
-    "体育频道": 14,
-    "动画频道": 14,
-    "经典剧场": 11,
+    "地方频道": 1415,
+    "港澳台": 293,
+    "央视频道": 157,
+    "卫视频道": 112,
+    "电影频道": 56,
+    "体育频道": 30,
+    "动画频道": 30,
+    "纪录频道": 28,
+    "经典剧场": 22,
+    "音乐频道": 6,
     "少儿频道": 4,
-    "音乐频道": 4,
-    "数字频道": 2,
-    "游戏频道": 2
+    "游戏频道": 3,
+    "数字频道": 2
   },
   "sources": [
     {
@@ -27,6 +41,11 @@
       "source": "guovin-iptv-api",
       "ok": true,
       "raw": 1619
+    },
+    {
+      "source": "ttvv-iptv",
+      "ok": true,
+      "raw": 4034
     },
     {
       "source": "fanmingming-ipv6",
