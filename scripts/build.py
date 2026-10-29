@@ -20,6 +20,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from urllib.parse import quote
 from datetime import datetime, timezone, timedelta
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -102,11 +103,27 @@ def mirror_urls(url: str):
     return urls
 
 
+def idna_url(url: str) -> str:
+    """把 http://饭太硬.cc/tv 这种中文域名转成可请求的 punycode 形式。"""
+    m = re.match(r"^(https?://)([^/:]+)(.*)$", url)
+    if not m:
+        return url
+    scheme, host, rest = m.groups()
+    try:
+        host.encode("ascii")
+        return url
+    except UnicodeEncodeError:
+        try:
+            return scheme + host.encode("idna").decode("ascii") + rest
+        except UnicodeError:
+            return url
+
+
 def fetch(url: str, retries: int = 3, timeout: int = 30) -> str:
     last_err = None
     for attempt in range(retries):
         for candidate in mirror_urls(url):
-            req = urllib.request.Request(candidate, headers={
+            req = urllib.request.Request(idna_url(candidate), headers={
                 "User-Agent": UA,
                 "Accept": "*/*",
                 "Accept-Encoding": "gzip, deflate",
@@ -212,6 +229,104 @@ def parse_any(text: str, source: dict):
     return parse_txt(text, source)
 
 
+# ---------------------------------------------------------------- TVBox 接口（饭太硬等）
+
+ENDPOINT_RE = re.compile(r"https?://[^\s\"'<>|)\]}]+")
+TVBOX_HINTS = ("饭太硬", "xxooo.cf", "fanying", "xn--", "fty.")
+
+
+def load_remembered_endpoints(source: dict):
+    path = (source.get("remember") or "data/endpoints.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return []
+    return [u for u in data.get(source["name"], []) if isinstance(u, str)]
+
+
+def remember_endpoints(source: dict, urls):
+    """把这次成功的接口地址记下来，下次（尤其是换域名后）优先尝试。"""
+    path = source.get("remember") or "data/endpoints.json"
+    data = {}
+    if os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            data = {}
+    old = [u for u in data.get(source["name"], []) if isinstance(u, str)]
+    merged = list(dict.fromkeys(list(urls) + old))[:12]
+    merged += [u for u in list(source.get("urls") or []) if u not in merged]
+    data[source["name"]] = merged[:12]
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+
+
+def discover_endpoints(pages):
+    """所有已知地址都失效时，去公开索引页里重新找饭太硬的接口地址。"""
+    found = []
+    for page in pages:
+        try:
+            text = fetch(page, retries=1, timeout=20)
+        except Exception as e:  # noqa: BLE001
+            log(f"[发现] 索引页 {page} 拉取失败: {e}")
+            continue
+        for m in ENDPOINT_RE.finditer(text):
+            u = m.group(0).rstrip(".,，、")
+            if any(h in u for h in TVBOX_HINTS):
+                found.append(u)
+    return list(dict.fromkeys(found))
+
+
+def load_tvbox_lives(source: dict, urls=None):
+    """TVBox 接口（饭太硬这类）：从配置里取出 lives 列表，再把每个直播列表拉下来解析。
+
+    返回 (条目列表, 成功解析出直播源的接口地址列表)。
+    """
+    urls = urls if urls is not None else list(source.get("urls") or ([source["url"]] if source.get("url") else []))
+    entries, used = [], []
+    for candidate in urls:
+        try:
+            raw = fetch(candidate, retries=1, timeout=25).strip()
+        except Exception as e:  # noqa: BLE001
+            log(f"[接口] {candidate} 拉取失败: {str(e)[:80]}")
+            continue
+        if not raw.startswith("{"):
+            log(f"[接口] {candidate} 不是 JSON 配置（可能被加密或反爬），跳过")
+            continue
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            log(f"[接口] {candidate} JSON 解析失败")
+            continue
+        lives = data.get("lives") or []
+        if not lives:
+            log(f"[接口] {candidate} 里没有直播源")
+            continue
+        log(f"[接口] {candidate} 里找到 {len(lives)} 个直播源")
+        for item in lives:
+            if not isinstance(item, dict) or item.get("api"):
+                continue
+            live_url = (item.get("url") or "").strip()
+            if not live_url.lower().startswith(("http://", "https://")):
+                continue
+            label = (item.get("name") or "直播").strip()
+            sub = {"name": f"{source['name']}-{label}"[:26], "priority": source.get("priority", 4)}
+            try:
+                text = fetch(live_url, retries=1, timeout=25)
+            except Exception as e:  # noqa: BLE001
+                log(f"[接口]   直播源「{label}」拉取失败: {str(e)[:60]}")
+                continue
+            part = parse_any(text, sub)
+            log(f"[接口]   {label}: {len(part)} 条")
+            entries.extend(part)
+            if candidate not in used:
+                used.append(candidate)
+    return entries, used
+
+
 # ---------------------------------------------------------------- 清洗
 
 def strip_quality(name: str) -> str:
@@ -231,21 +346,55 @@ def quality_score(text: str) -> int:
 
 def channel_key(name: str, tvg_name: str = "") -> str:
     """把同一频道的各种写法归一到同一个 key，便于去重。"""
+    raw = PROVINCE_PREFIX_RE.sub("", (tvg_name or name).strip())
+    if re.match(r"(?i)^cctv[\s\-_]*4\s*k", raw):
+        return "CCTV4K"
+    if re.match(r"(?i)^cctv[\s\-_]*8\s*k", raw):
+        return "CCTV8K"
     base = strip_quality(tvg_name) or strip_quality(name)
     base = PROVINCE_PREFIX_RE.sub("", base)
     base = base.replace("电视台", "").replace("频道", "")
-    if re.match(r"(?i)^cctv\s*-?\s*8\s*k$", base):
-        return "CCTV8K"
     m = CCTV_RE.match(base)
     if m:
         num, plus, _rest = m.groups()
         return f"CCTV{int(num)}{'+' if plus else ''}"
-    if re.match(r"(?i)^cctv", base):
-        return base.upper()
+    # CCTV 旗下的非数字频道：CCTV世界地理 / 世界地理 / 央视精品 统一成同一个 key
+    core = re.sub(r"(?i)^cctv[\s\-_·]*", "", base)
+    if core != base or base.startswith("央视"):
+        core = re.sub(r"^央视(?=[\u4e00-\u9fa5]{2,})", "", core)
+        core = CANON_ALIAS.get(core.upper(), core)
+        if core:
+            return core
+        return "CCTV"
+    # 中国教育1台 / 中国教育一台 / CETV-1 都是同一个台
+    m = re.match(r"^中国教育(?:电视台)?[\s\-_]*([1-9一二三四五六七八九])\s*(?:台|套|频道)?$", base)
+    if m:
+        return "CETV" + CN_NUM.get(m.group(1), m.group(1))
+    # CETV-1 / CETV1
+    if re.match(r"(?i)^cetv", base):
+        return re.sub(r"(?i)^cetv[\s\-_]*", "CETV", base)
+    # CGTN 阿语/阿拉伯语、英语/CGTN 本身
+    if re.match(r"(?i)^cgtn", base):
+        tail = re.sub(r"(?i)^cgtn[\s\-_]*", "", base)
+        tail = CANON_ALIAS.get("CGTN" + tail.upper(), CANON_ALIAS.get(tail.upper(), tail))
+        return "CGTN" + tail
     # 湖南卫视 / 湖南卫视高清 统一为 湖南卫视
     if "卫视" in base:
         return base.split("卫视")[0] + "卫视"
     return base.upper()
+
+
+# 同一频道的其它写法 -> 标准写法
+CN_NUM = {"一": "1", "二": "2", "三": "3", "四": "4", "五": "5",
+          "六": "6", "七": "7", "八": "8", "九": "9"}
+
+CANON_ALIAS = {
+    "CGTN阿拉伯语": "阿语", "CGTN西班牙语": "西语", "CGTN英语": "", "CGTN频道": "",
+    "CGTN记录": "纪录", "CGTN纪录频道": "纪录",
+    "央视文化精品": "文化精品", "央视精品": "文化精品",
+    "高尔夫•网球": "高尔夫网球", "高尔夫网球频道": "高尔夫网球",
+    "央视台球": "台球", "电视指南": "电视指南",
+}
 
 
 # 「上海｜东方卫视」「黑龙江·新闻综合」这种带省份前缀的写法，前缀去掉再比对
@@ -328,16 +477,135 @@ def is_promo(entry: dict, filters: dict) -> bool:
     return False
 
 
-def logo_for(entry: dict, key: str, cfg: dict) -> str:
+LOGO_ALIAS = {
+    "CGTN英语": "CGTN", "CGTN纪录": "CGTN纪录", "CGTN记录": "CGTN纪录",
+    "CGTN阿拉伯语": "CGTN阿语", "CGTN西班牙语": "CGTN西语", "CGTN俄语": "CGTN俄语",
+    "CGTN法语": "CGTN法语", "央视文化精品": "文化精品", "央视精品": "文化精品",
+    "CCTV4K": "CCTV4K", "CCTV4K超高清": "CCTV4K",
+}
+
+
+def logo_for(entry: dict, key: str, cfg: dict, logo_index=None, auto_logos=None) -> str:
     base = cfg["output"].get("logo_base", "")
-    known = re.match(r"^(CCTV\d{1,2}\+?)$", key)
-    if known and base:
-        return f"{base}{key}.png"
+    auto_base = (cfg.get("logos") or {}).get("auto_base",
+                "https://cdn.jsdelivr.net/gh/ralph2009/live@main/logos/")
+    if logo_index and base:
+        cands = [key]
+        if key.upper().startswith("CCTV") and len(key) > 4:
+            cands += [key[4:], key[4:].replace("央视", "")]
+        cands += [entry.get("tvg_name", ""), entry.get("name", "")]
+        for c in cands:
+            if not c:
+                continue
+            for variant in (c, strip_quality(c), LOGO_ALIAS.get(c.upper()) or LOGO_ALIAS.get(c)):
+                if not variant:
+                    continue
+                hit = logo_index.get(norm_logo_key(variant))
+                if hit:
+                    return hit
     if entry.get("logo"):
         return entry["logo"]
+    # 台标库里没有的（多是县级台），用我们自己生成的占位台标
+    if auto_logos and auto_base:
+        for c in (entry.get("name", ""), entry.get("tvg_name", ""), key):
+            fname = auto_logos.get(c)
+            if fname:
+                return f"{auto_base}{quote(fname)}"
     if base and re.match(r"^[\u4e00-\u9fa5]{2,6}卫视$", key):
         return f"{base}{key}.png"
     return ""
+
+
+LOGO_CACHE = "data/logos.json"
+
+# 台标库：按顺序匹配，前面的优先。base 后面拼文件名（中文会被 URL 编码）
+DEFAULT_LOGO_LIBS = [
+    {
+        "name": "fanmingming",
+        "tree": "https://api.github.com/repos/fanmingming/live/git/trees/main?recursive=1",
+        "prefix": "tv/",
+        "base": "https://live.fanmingming.cn/tv/",
+    },
+    {
+        "name": "wanglindl",
+        "tree": "https://api.github.com/repos/vircloud/TVLogo/git/trees/main?recursive=1",
+        "prefix": "",
+        "base": "https://cdn.jsdelivr.net/gh/vircloud/TVLogo@main/",
+    },
+    {
+        "name": "samkolau",
+        "tree": "https://api.github.com/repos/samkolau/TVLOGO/git/trees/main?recursive=1",
+        "prefix": "logo/",
+        "base": "https://cdn.jsdelivr.net/gh/samkolau/TVLOGO@main/",
+    },
+]
+
+
+def norm_logo_key(s: str) -> str:
+    s = s.strip().upper()
+    s = re.sub(r"\.(PNG|JPG|JPEG)$", "", s)
+    return re.sub(r"[\s\-_·•|/（）()\[\]【】\.,、]", "", s)
+
+
+def _fetch_logo_lib(lib):
+    """返回 {归一化名字: 完整台标地址}"""
+    req = urllib.request.Request(lib["tree"], headers={
+        "User-Agent": UA, "Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(req, timeout=40) as resp:
+        data = json.loads(resp.read().decode("utf-8", "ignore"))
+    out = {}
+    prefix = lib.get("prefix", "")
+    for it in data.get("tree", []):
+        path = it.get("path", "")
+        if it.get("type") != "blob" or not path.lower().endswith((".png", ".jpg", ".jpeg")):
+            continue
+        if prefix and not path.startswith(prefix):
+            continue
+        name = path[len(prefix):] if prefix else path
+        key = norm_logo_key(name)
+        if key and key not in out:
+            out[key] = lib["base"] + quote(name)
+    return out
+
+
+def load_logo_index(cfg: dict):
+    """合并多个台标库（约 2900 张），缓存到 data/logos.json，默认 7 天更新一次。"""
+    lg = cfg.get("logos") or {}
+    if not lg.get("enabled", True):
+        return {}
+    cache = lg.get("cache", LOGO_CACHE)
+    ttl = float(lg.get("ttl_days", 7)) * 86400
+    libs = lg.get("libraries") or DEFAULT_LOGO_LIBS
+
+    data = None
+    if os.path.exists(cache):
+        try:
+            with open(cache, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            data = None
+        if data and data.get("index") and time.time() - data.get("fetched_at", 0) < ttl:
+            log(f"[台标] 已加载 {len(data['index'])} 个台标（缓存）")
+            return data["index"]
+
+    index, got = dict((data or {}).get("index", {})), []
+    for lib in libs:
+        try:
+            part = _fetch_logo_lib(lib)
+            for k, v in part.items():
+                index.setdefault(k, v)      # 排在前面的库优先
+            got.append(f"{lib['name']}:{len(part)}")
+        except Exception as e:  # noqa: BLE001 某个库挂了不影响其它库
+            log(f"[台标] {lib.get('name')} 拉取失败：{e}")
+
+    if got:
+        os.makedirs(os.path.dirname(cache) or ".", exist_ok=True)
+        with open(cache, "w", encoding="utf-8", newline="\n") as f:
+            json.dump({"fetched_at": time.time(), "index": index}, f, ensure_ascii=False)
+        log(f"[台标] 索引已更新：{len(index)} 个台标（{'、'.join(got)}）")
+    elif data:
+        log(f"[台标] 全部台标库拉取失败，使用缓存 {len(index)} 个")
+    return index
 
 
 def build_entries(cfg: dict):
@@ -346,6 +614,33 @@ def build_entries(cfg: dict):
 
     for source in cfg["sources"]:
         if not source.get("enabled", True):
+            continue
+        if source.get("type") == "tvbox":
+            # 尝试顺序：上次能用的地址 -> 配置里的候选 -> 全网重新搜到的地址
+            tries = []
+            remembered = load_remembered_endpoints(source)
+            if remembered:
+                log(f"[接口] 上次可用地址 {len(remembered)} 个，优先试")
+                tries.append(remembered)
+            if source.get("urls") or source.get("url"):
+                tries.append(list(source.get("urls") or [source["url"]]))
+            raw_entries, used = [], []
+            for urls in tries:
+                raw_entries, used = load_tvbox_lives(source, urls=urls)
+                if raw_entries:
+                    break
+            if not raw_entries and source.get("discover"):
+                log(f"[接口] {source['name']} 已知地址都失效，全网重新找…")
+                extra = discover_endpoints(source["discover"])
+                if extra:
+                    log(f"[接口] 搜到 {len(extra)} 个候选地址，逐个尝试")
+                    raw_entries, used = load_tvbox_lives({**source, "urls": extra}, urls=extra)
+            if used:
+                remember_endpoints(source, used)
+            ok = bool(raw_entries)
+            source_stats.append({"source": source["name"], "ok": ok, "raw": len(raw_entries)})
+            log(f"[源] {source['name']:<18} {'拉取成功，' + str(len(raw_entries)) + ' 条' if ok else '没有拿到可用直播源'}")
+            all_entries.extend(raw_entries)
             continue
         try:
             text = fetch(source["url"])
@@ -436,6 +731,14 @@ def build_pool(candidates: dict, cfg: dict):
     return pool
 
 
+def name_rank(name: str):
+    """给同一频道的候选名字打分：越小越适合做展示名。
+    优先保留带品牌前缀的写法（央视台球 好于 台球），其次是更短的（东方卫视 好于 东方卫视4K）。
+    """
+    brand = bool(re.match(r"(?i)^(cctv|cgtn|cetv|chc|央视|中国教育)", name)) or "卫视" in name
+    return (0 if brand else 1, len(name), name)
+
+
 def select_entries(candidates: dict, cfg: dict, health: dict):
     """结合体检结果挑最终线路：能用(ok) > 未确认(unknown/未测) > 失效(bad，默认丢弃)。"""
     hcfg = cfg.get("health") or {}
@@ -473,6 +776,19 @@ def select_entries(candidates: dict, cfg: dict, health: dict):
             c = dict(c)
             c["health"] = label
             picked.append(c)
+        # 同一个频道所有线路统一用同一个名字（东方卫视4K / 东方卫视 -> 东方卫视），避免列表看着重复
+        disp = min((c["name"] for c in cands if c.get("name")),
+                   key=lambda n: name_rank(n), default="")
+        # 分组也统一（CETV1 有的源放在央视频道、有的放在卫视频道，不能两边都出现）
+        gdisp = min((c["group"] for c in cands if c.get("group")),
+                    key=lambda g: GROUP_ORDER.index(g) if g in GROUP_ORDER else len(GROUP_ORDER),
+                    default="")
+        if disp:
+            for c in picked:
+                c["name"] = disp
+        if gdisp:
+            for c in picked:
+                c["group"] = gdisp
         entries.extend(picked)
 
     log(f"[选线] {sum(len(v) for v in candidates.values())} 条线路 -> 输出 {len(entries)} 条"
@@ -497,8 +813,9 @@ def select_entries(candidates: dict, cfg: dict, health: dict):
 
 # ---------------------------------------------------------------- 输出
 
-def write_m3u(entries, cfg, path):
+def write_m3u(entries, cfg, path, logo_index=None, auto_logos=None):
     out = io.StringIO()
+    with_logo = 0
     header = f'#EXTM3U x-tvg-url="{cfg["output"].get("epg", "")}"'
     out.write(header + "\n")
     for e in entries:
@@ -508,14 +825,16 @@ def write_m3u(entries, cfg, path):
         if cfg["output"].get("include_tvg_id", True) and e.get("tvg_id"):
             attrs.append(f'tvg-id="{e["tvg_id"]}"')
         attrs.append(f'tvg-name="{tvg_name}"')
-        logo = logo_for(e, key, cfg)
+        logo = logo_for(e, key, cfg, logo_index, auto_logos)
         if logo:
             attrs.append(f'tvg-logo="{logo}"')
+            with_logo += 1
         attrs.append(f'group-title="{e["group"]}"')
         out.write(f'#EXTINF:-1 {" ".join(attrs)},{e["name"]}\n{e["url"]}\n')
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write(out.getvalue())
+    return with_logo
 
 
 def write_txt(entries, path, multi_url=True):
@@ -672,10 +991,43 @@ def main():
     for e in entries:
         groups[e["group"]] = groups.get(e["group"], 0) + 1
 
-    write_m3u(entries, cfg, cfg["output"]["m3u"])
+    logo_index = load_logo_index(cfg)
+    auto_logos = {}
+    auto_path = (cfg.get("logos") or {}).get("auto_index", "data/auto-logos.json")
+    if os.path.exists(auto_path):
+        try:
+            with open(auto_path, encoding="utf-8") as f:
+                auto_logos = json.load(f)
+        except (OSError, ValueError):
+            auto_logos = {}
+    with_logo = write_m3u(entries, cfg, cfg["output"]["m3u"], logo_index, auto_logos)
+    log(f"[台标] {len(entries)} 条中有台标 {with_logo} 条（含自制 {len(auto_logos)} 个）")
     if cfg["output"].get("txt"):
         write_txt(entries, cfg["output"]["txt"],
                   multi_url=bool(cfg["output"].get("txt_multi_url", True)))
+
+    # 附加精简版：按分组白名单各切一份（例如只要央视 + 卫视）
+    variant_stats = {}
+    for v in (cfg["output"].get("variants") or []):
+        if not v.get("enabled", True):
+            continue
+        allow = set(v.get("groups") or [])
+        name_re = re.compile(v["name_regex"]) if v.get("name_regex") else None
+        sub = [e for e in entries
+               if e["group"] in allow
+               or (name_re and name_re.search(e["name"] + " " + e.get("tvg_name", "")))]
+        vname = v.get("name") or "variant"
+        if not sub:
+            log(f"[精简] {vname} 没有匹配频道，跳过")
+            continue
+        v_m3u = v.get("m3u") or f"output/{vname}.m3u"
+        write_m3u(sub, cfg, v_m3u, logo_index, auto_logos)
+        if v.get("txt"):
+            write_txt(sub, v["txt"], multi_url=bool(cfg["output"].get("txt_multi_url", True)))
+        chans = len({e["key"] for e in sub})
+        variant_stats[vname] = {"channels": chans, "lines": len(sub), "groups": sorted(allow),
+                                "m3u": v_m3u, "txt": v.get("txt")}
+        log(f"[精简] {vname}：{chans} 个频道 / {len(sub)} 条线路 -> {v_m3u}")
 
     stats = {
         "updated_at": now_cn(),
@@ -684,8 +1036,10 @@ def main():
         "removed_promo": removed["promo"],
         "removed_bad_url": removed["bad_url"],
         "selection": sel_stats,
+        "logos": {"channels_with_logo": with_logo, "logo_index": len(logo_index)},
         "health": health_summary,
         "groups": dict(sorted(groups.items(), key=lambda kv: -kv[1])),
+        "variants": variant_stats,
         "sources": source_stats,
         "catalog": {k: catalog.get(k) for k in ("total_raw", "total_kept", "removed_promo", "groups")} if catalog else None,
     }

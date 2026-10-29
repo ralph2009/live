@@ -59,6 +59,27 @@ class TestChannelKey(unittest.TestCase):
         self.assertEqual(build.channel_key("湖南卫视高清"), "湖南卫视")
         self.assertEqual(build.channel_key("湖南卫视"), "湖南卫视")
 
+    def test_cctv_pay_channels_merge(self):
+        # CCTV 前缀有和没有，都是同一个付费频道
+        self.assertEqual(build.channel_key("CCTV世界地理"), build.channel_key("世界地理"))
+        self.assertEqual(build.channel_key("CCTV风云足球"), build.channel_key("风云足球"))
+        self.assertEqual(build.channel_key("CCTV央视台球"), build.channel_key("央视台球"))
+
+    def test_cetv_merge(self):
+        self.assertEqual(build.channel_key("CETV-1"), "CETV1")
+        self.assertEqual(build.channel_key("CETV1"), "CETV1")
+        self.assertEqual(build.channel_key("中国教育1台"), "CETV1")
+        self.assertEqual(build.channel_key("中国教育一台"), "CETV1")
+
+    def test_cgtn_alias(self):
+        self.assertEqual(build.channel_key("CGTN阿拉伯语"), build.channel_key("CGTN阿语"))
+        self.assertEqual(build.channel_key("CGTN英语"), build.channel_key("CGTN"))
+
+    def test_display_name_prefers_brand(self):
+        # 「央视台球」比「台球」更适合当展示名；「东方卫视」比「东方卫视4K」短
+        self.assertLess(build.name_rank("央视台球"), build.name_rank("台球"))
+        self.assertLess(build.name_rank("东方卫视"), build.name_rank("东方卫视4K"))
+
 
 class TestGroupNormalize(unittest.TestCase):
     def test_english_groups(self):

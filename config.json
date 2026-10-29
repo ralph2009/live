@@ -7,7 +7,20 @@
     "logo_base": "https://live.fanmingming.cn/tv/",
     "max_per_channel": 0,
     "txt_multi_url": true,
-    "include_tvg_id": true
+    "include_tvg_id": true,
+    "variants": [
+      {
+        "name": "cctv-sat",
+        "enabled": true,
+        "desc": "只保留央视频道 + 卫视频道",
+        "groups": [
+          "央视频道",
+          "卫视频道"
+        ],
+        "m3u": "output/cctv-sat.m3u",
+        "txt": "output/cctv-sat.txt"
+      }
+    ]
   },
   "health": {
     "enabled": true,
@@ -121,6 +134,23 @@
       "priority": 3
     },
     {
+      "name": "fantaiying-live",
+      "type": "tvbox",
+      "urls": [
+        "http://www.饭太硬.cc/tv",
+        "http://fty.xxooo.cf/tv",
+        "http://饭太硬.top/tv"
+      ],
+      "discover": [
+        "https://raw.githubusercontent.com/ngo5/IPTV/main/README.md",
+        "https://raw.githubusercontent.com/gaotianliuyun/gao/master/README.md",
+        "https://raw.githubusercontent.com/yoursmile66/TVBox/main/README.md"
+      ],
+      "enabled": true,
+      "priority": 4,
+      "remember": "data/endpoints.json"
+    },
+    {
       "name": "fanmingming-ipv4",
       "url": "https://raw.githubusercontent.com/fanmingming/live/main/tv/m3u/ipv4.m3u",
       "enabled": false,
@@ -150,5 +180,12 @@
     "url": "http://tvlive.fengcaizb.com/channels/gqds3.gz",
     "output_json": "output/channel-catalog.json",
     "output_txt": "output/channel-catalog.txt"
+  },
+  "logos": {
+    "enabled": true,
+    "ttl_days": 7,
+    "cache": "data/logos.json",
+    "auto_index": "data/auto-logos.json",
+    "auto_base": "https://cdn.jsdelivr.net/gh/ralph2009/live@main/logos/"
   }
 }

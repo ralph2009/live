@@ -14,10 +14,15 @@
 
 | 用途 | 地址 |
 | --- | --- |
-| jsDelivr（国内较快，有缓存） | `https://cdn.jsdelivr.net/gh/ralph2009/live@main/output/live.m3u` |
-| jsDelivr fastly 节点（部分网络更通） | `https://fastly.jsdelivr.net/gh/ralph2009/live@main/output/live.m3u` |
-| GitHub 源站 | `https://raw.githubusercontent.com/ralph2009/live/main/output/live.m3u` |
-| DIYP / 影视仓 txt 格式 | `https://cdn.jsdelivr.net/gh/ralph2009/live@main/output/live.txt` |
+| 全部频道 · jsDelivr（国内较快，有缓存） | `https://cdn.jsdelivr.net/gh/ralph2009/live@main/output/live.m3u` |
+| 全部频道 · fastly 节点（部分网络更通） | `https://fastly.jsdelivr.net/gh/ralph2009/live@main/output/live.m3u` |
+| 全部频道 · GitHub 源站 | `https://raw.githubusercontent.com/ralph2009/live/main/output/live.m3u` |
+| 全部频道 · DIYP / 影视仓 txt | `https://cdn.jsdelivr.net/gh/ralph2009/live@main/output/live.txt` |
+| **只要央视 + 卫视** · m3u | `https://cdn.jsdelivr.net/gh/ralph2009/live@main/output/cctv-sat.m3u` |
+| **只要央视 + 卫视** · fastly 节点 | `https://fastly.jsdelivr.net/gh/ralph2009/live@main/output/cctv-sat.m3u` |
+| **只要央视 + 卫视** · txt | `https://cdn.jsdelivr.net/gh/ralph2009/live@main/output/cctv-sat.txt` |
+
+> `cctv-sat` 只保留 `央视频道`（CCTV-1~17、CCTV-4K/8K、CETV、CGTN、央视付费频道）和 `卫视频道`（各省卫视 + 中国教育台）两组，约 90 个台、1200 条线路，不含地方台和港澳台。和主列表同一份数据、同一次体检，每天一起更新。
 
 > jsDelivr 会缓存数小时，想要"完全实时"就用源站地址。
 
@@ -102,6 +107,7 @@ schedule:
 | `output.max_per_channel` | 每个频道最多保留几条线路，`0` 表示不限（默认 0，有几条留几条） |
 | `output.txt_multi_url` | txt 里同频道多条线路用 `#` 连接（DIYP 标准写法），默认开 |
 | `output.epg` | 写入 M3U 头部的 EPG 地址 |
+| `output.variants[]` | 精简版输出：按 `groups` 白名单切出另一份列表（现在配的是 `cctv-sat` = 央视频道 + 卫视频道），可选 `name_regex` 兜底按台名匹配 |
 | `filters.allowed_schemes` | 允许的协议，默认只留 `http`/`https`（组播 `rtp://`/`udp://` 绝大多数播放器用不了） |
 | `health.enabled` | 是否在每次更新时体检地址，默认开 |
 | `health.concurrency` / `connect_timeout` / `read_timeout` | 体检并发与超时，默认 64 / 4s / 5s |
