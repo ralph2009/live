@@ -1,0 +1,58 @@
+name: 更新直播源
+
+on:
+  schedule:
+    # 每天北京时间 04:00 自动更新（GitHub 用 UTC，20:00 UTC = 次日 04:00 北京时间）
+    - cron: "0 20 * * *"
+  workflow_dispatch:        # 支持在 Actions 页面手动点一下立即更新
+  push:
+    branches: [main]
+    paths:                  # 改了配置或脚本就自动重跑一次
+      - "config.json"
+      - "scripts/**"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-playlist
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 准备 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 下载并清洗直播源
+        run: python scripts/build.py
+
+      - name: 提交更新
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add output
+          if git diff --cached --quiet; then
+            echo "本次结果与上次一致，跳过提交"
+          else
+            git commit -m "chore: 更新直播源 $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M')"
+            git push
+          fi
+
+      - name: 写入运行摘要
+        if: always()
+        run: |
+          {
+            echo "### 直播源更新结果"
+            echo ""
+            echo '```json'
+            cat output/stats.json 2>/dev/null || echo "{}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
