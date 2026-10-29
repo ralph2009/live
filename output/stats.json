@@ -1,0 +1,33 @@
+{
+  "updated_at": "2026-10-29 21:06:59",
+  "total_channels": 411,
+  "removed_promo": 102,
+  "groups": {
+    "地方频道": 245,
+    "卫视频道": 54,
+    "数字频道": 35,
+    "央视频道": 25,
+    "纪录频道": 25,
+    "电影频道": 17,
+    "少儿频道": 4,
+    "体育频道": 3,
+    "音乐频道": 3
+  },
+  "sources": [
+    {
+      "source": "vbskycn-iptv4",
+      "ok": true,
+      "raw": 430
+    },
+    {
+      "source": "fanmingming-ipv6",
+      "ok": true,
+      "raw": 82
+    },
+    {
+      "source": "yuechan-live",
+      "ok": true,
+      "raw": 96
+    }
+  ]
+}

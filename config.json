@@ -1,0 +1,99 @@
+{
+  "output": {
+    "m3u": "output/live.m3u",
+    "txt": "output/live.txt",
+    "stats": "output/stats.json",
+    "epg": "https://live.fanmingming.cn/e.xml",
+    "logo_base": "https://live.fanmingming.cn/tv/",
+    "max_per_channel": 1,
+    "include_tvg_id": true
+  },
+  "filters": {
+    "promo_keywords": [
+      "购物",
+      "推广",
+      "好物",
+      "欢乐购",
+      "导视",
+      "精选",
+      "优选",
+      "严选",
+      "秒杀",
+      "抢购",
+      "优惠",
+      "折扣",
+      "特价",
+      "广告",
+      "带货",
+      "专场",
+      "福利",
+      "试看",
+      "试用",
+      "下单",
+      "客服",
+      "商城",
+      "特卖",
+      "团购",
+      "促销",
+      "招商",
+      "加盟",
+      "赔钱",
+      "清仓",
+      "9块9",
+      "九块九",
+      "包邮",
+      "返利",
+      "优惠券"
+    ],
+    "blocked_groups": [
+      "更新时间",
+      "测试",
+      "广告",
+      "购物",
+      "推广",
+      "福利",
+      "备用",
+      "公告",
+      "活动",
+      "直播中国",
+      "春晚频道"
+    ],
+    "blocked_name_patterns": [
+      "^\\s*$",
+      "^\\d+$"
+    ],
+    "keep_foreign": true
+  },
+  "sources": [
+    {
+      "name": "vbskycn-iptv4",
+      "url": "https://raw.githubusercontent.com/vbskycn/iptv/master/tv/iptv4.m3u",
+      "enabled": true,
+      "priority": 1
+    },
+    {
+      "name": "fanmingming-ipv4",
+      "url": "https://raw.githubusercontent.com/fanmingming/live/main/tv/m3u/ipv4.m3u",
+      "enabled": false,
+      "priority": 2
+    },
+    {
+      "name": "fanmingming-ipv6",
+      "url": "https://raw.githubusercontent.com/fanmingming/live/main/tv/m3u/ipv6.m3u",
+      "enabled": true,
+      "priority": 3
+    },
+    {
+      "name": "yuechan-live",
+      "url": "https://raw.githubusercontent.com/yuechan/Live/main/IPTV.m3u",
+      "enabled": true,
+      "priority": 4
+    },
+    {
+      "name": "iptv-org-cn",
+      "url": "https://iptv-org.github.io/iptv/countries/cn.m3u",
+      "enabled": false,
+      "priority": 9
+    }
+  ]
+}
