@@ -21,7 +21,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - name: 检出仓库
         uses: actions/checkout@v4
@@ -31,7 +31,10 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: 下载并清洗直播源
+      - name: 跑一遍清洗规则自检
+        run: python -m unittest discover -s tests -v
+
+      - name: 下载、清洗并体检直播源
         run: python scripts/build.py
 
       - name: 提交更新
@@ -51,6 +54,15 @@ jobs:
         run: |
           {
             echo "### 直播源更新结果"
+            echo ""
+            if [ -f output/health-summary.json ]; then
+              echo "**地址体检**"
+              echo ""
+              echo '```json'
+              cat output/health-summary.json
+              echo '```'
+            fi
+            echo "**整体统计**"
             echo ""
             echo '```json'
             cat output/stats.json 2>/dev/null || echo "{}"

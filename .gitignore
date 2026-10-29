@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 .DS_Store
 tmp/
+
+# 体检中间产物：地址池和逐条探测明细只在本地产出，不进仓库（只提交 health-summary.json）
+output/.pool.json
+output/health.json

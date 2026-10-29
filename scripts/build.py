@@ -54,7 +54,7 @@ PROVINCES = [
     "北京", "上海", "天津", "重庆", "河北", "山西", "辽宁", "吉林", "黑龙江", "江苏",
     "浙江", "安徽", "福建", "江西", "山东", "河南", "湖北", "湖南", "广东", "广西",
     "海南", "四川", "贵州", "云南", "西藏", "陕西", "甘肃", "青海", "宁夏", "新疆",
-    "内蒙", "香港", "澳门", "台湾",
+    "内蒙", "内蒙古", "香港", "澳门", "台湾",
 ]
 
 # 画质关键词 -> 分值（分越高越优先）
@@ -168,6 +168,14 @@ def parse_m3u(text: str, source: dict):
     return entries
 
 
+def clean_url(url: str) -> str:
+    """去掉地址后面的线路说明标签，例如 `http://x/a.m3u8$LR•IPV4『线路2』`。"""
+    url = url.strip()
+    if "$" in url:
+        url = url.split("$", 1)[0].strip()
+    return url
+
+
 def parse_txt(text: str, source: dict):
     """DIYP / 影视仓常用的 txt 格式：`分组,#genre#` 后面跟 `频道名,地址`"""
     entries = []
@@ -182,7 +190,7 @@ def parse_txt(text: str, source: dict):
         if "," not in line:
             continue
         name, url = line.split(",", 1)
-        url = url.strip()
+        url = clean_url(url)
         if not re.match(r"^(https?|rtmp|rtsp|udp|rtp|igmp|p3p|mitv)://", url, re.I):
             continue
         entries.append({
@@ -224,7 +232,10 @@ def quality_score(text: str) -> int:
 def channel_key(name: str, tvg_name: str = "") -> str:
     """把同一频道的各种写法归一到同一个 key，便于去重。"""
     base = strip_quality(tvg_name) or strip_quality(name)
+    base = PROVINCE_PREFIX_RE.sub("", base)
     base = base.replace("电视台", "").replace("频道", "")
+    if re.match(r"(?i)^cctv\s*-?\s*8\s*k$", base):
+        return "CCTV8K"
     m = CCTV_RE.match(base)
     if m:
         num, plus, _rest = m.groups()
@@ -235,6 +246,20 @@ def channel_key(name: str, tvg_name: str = "") -> str:
     if "卫视" in base:
         return base.split("卫视")[0] + "卫视"
     return base.upper()
+
+
+# 「上海｜东方卫视」「黑龙江·新闻综合」这种带省份前缀的写法，前缀去掉再比对
+PROVINCE_PREFIX_RE = re.compile(r"^(?:%s)\s*[｜|·•\-—_/]\s*" % "|".join(PROVINCES))
+
+
+def display_name(name: str, key: str) -> str:
+    """列表里显示的名字：去掉省份前缀，CCTV 统一成 CCTV-1 这种写法。"""
+    out = PROVINCE_PREFIX_RE.sub("", name.strip())
+    m = re.match(r"^CCTV(\d+)(\+?)$", key)
+    if m:
+        return f"CCTV-{m.group(1)}{m.group(2)}"
+    return out or name
+
 
 
 GROUP_EMOJI_RE = re.compile(r"^[^0-9A-Za-z\u4e00-\u9fa5]+")
@@ -264,6 +289,10 @@ def normalize_group(group: str, name: str) -> str:
         if k in g:
             return v
     if g.endswith("频道") and any(p in g for p in PROVINCES):
+        return "地方频道"
+    # 分组直接写成省名（江苏 / 安徽 / 内蒙古 …）也归入地方频道
+    bare = g.replace("频道", "").replace("电视台", "").replace("台", "").replace("省", "").strip()
+    if bare in PROVINCES or bare + "省" in PROVINCES:
         return "地方频道"
     # 英文分组统一翻成中文，避免列表里中英混杂
     for seg in re.split(r"[;,/&|]", low):
@@ -333,12 +362,17 @@ def build_entries(cfg: dict):
 
     # 1) 过滤推广 / 无效
     allowed_schemes = tuple(filters.get("allowed_schemes", ("http", "https")))
-    kept, removed_promo = [], 0
+    url_blocks = [re.compile(p, re.I) for p in filters.get("blocked_url_patterns", []) if p]
+    kept, removed_promo, removed_url = [], 0, 0
     for e in all_entries:
         if not e["name"] or not e["url"]:
             continue
+        e["url"] = clean_url(e["url"])
         if not e["url"].lower().startswith(allowed_schemes):
             removed_promo += 1
+            continue
+        if any(p.search(e["url"]) for p in url_blocks):
+            removed_url += 1
             continue
         if is_promo(e, filters):
             removed_promo += 1
@@ -350,30 +384,96 @@ def build_entries(cfg: dict):
         e["key"] = channel_key(e["name"], e.get("tvg_name", ""))
         if not e["key"]:
             continue
+        e["name"] = display_name(e["name"], e["key"])
         kept.append(e)
-    log(f"[过滤] 剔除推广/广告频道 {removed_promo} 条，剩余 {len(kept)} 条")
+    log(f"[过滤] 剔除推广/广告频道 {removed_promo} 条，剔除无效地址 {removed_url} 条，剩余 {len(kept)} 条")
 
-    # 2) 同频道选最优线路（优先级 -> 画质），地址去重
-    max_per = int(cfg["output"].get("max_per_channel", 1) or 1)
+    # 2) 按频道归并，同一频道保留多条线路（去重后按 源优先级 -> 画质 排序）
     candidates = {}
     for e in kept:
         candidates.setdefault(e["key"], []).append(e)
 
-    entries = []
-    for cands in candidates.values():
+    for key, cands in candidates.items():
         cands.sort(key=lambda x: (x["priority"],
                                   -quality_score(x["name"] + " " + x.get("tvg_name", ""))))
-        seen, picked = set(), []
+        seen, unique = set(), []
         for c in cands:
-            url_key = c["url"].split("?")[0]
-            if url_key in seen:
+            if c["url"] in seen:
                 continue
-            seen.add(url_key)
-            picked.append(c)
-            if len(picked) >= max_per:
+            seen.add(c["url"])
+            unique.append(c)
+        candidates[key] = unique
+
+    total_lines = sum(len(v) for v in candidates.values())
+    log(f"[归并] {len(kept)} 条线路 -> {len(candidates)} 个频道（共 {total_lines} 条可用线路）")
+    return candidates, source_stats, {"promo": removed_promo, "bad_url": removed_url}
+
+
+def build_pool(candidates: dict, cfg: dict):
+    """挑出要送去体检的地址：每个频道最多 test_per_channel 条，优先照顾不同主机，避免全压在同一个 CDN 上。"""
+    per = int((cfg.get("health") or {}).get("test_per_channel", 8) or 8)
+    pool = []
+    for key, cands in candidates.items():
+        chosen, hosts = [], set()
+        for c in cands:                      # 第一轮：每个主机各取一条
+            host = (re.sub(r"^https?://", "", c["url"]).split("/")[0]).lower()
+            if host in hosts:
+                continue
+            hosts.add(host)
+            chosen.append(c)
+            if len(chosen) >= per:
                 break
+        if len(chosen) < per:                # 第二轮：不够再按顺序补齐
+            for c in cands:
+                if c not in chosen:
+                    chosen.append(c)
+                if len(chosen) >= per:
+                    break
+        pool.extend(chosen)
+    return pool
+
+
+def select_entries(candidates: dict, cfg: dict, health: dict):
+    """结合体检结果挑最终线路：能用(ok) > 未确认(unknown/未测) > 失效(bad，默认丢弃)。"""
+    hcfg = cfg.get("health") or {}
+    max_per = int(cfg["output"].get("max_per_channel", 1) or 1)
+    drop_bad = bool(hcfg.get("drop_bad", True))
+
+    def rank(url):
+        r = (health or {}).get(url)
+        if not r:
+            return 2, "未测"
+        if r["status"] == "ok":
+            return 3, "可用"
+        if r["status"] == "bad":
+            return 0, "失效"
+        return 2, "未确认"
+
+    entries, dropped_channels, bad_dropped = [], 0, 0
+    for key, cands in candidates.items():
+        scored = []
+        for c in cands:
+            r, label = rank(c["url"])
+            scored.append((r, c, label))
+        if drop_bad:
+            alive = [x for x in scored if x[0] > 0]
+            bad_dropped += len(scored) - len(alive)
+            if not alive:
+                dropped_channels += 1
+                continue
+            scored = alive
+        # 先按体检结果，再按源优先级和画质
+        scored.sort(key=lambda x: (-x[0], x[1]["priority"],
+                                   -quality_score(x[1]["name"] + " " + x[1].get("tvg_name", ""))))
+        picked = []
+        for r, c, label in scored[:max_per]:
+            c = dict(c)
+            c["health"] = label
+            picked.append(c)
         entries.extend(picked)
-    log(f"[去重] {len(kept)} 条线路归并为 {len(entries)} 个频道条目")
+
+    log(f"[选线] {sum(len(v) for v in candidates.values())} 条线路 -> 输出 {len(entries)} 条"
+        f"（丢弃失效 {bad_dropped} 条，整台无可用线路 {dropped_channels} 个）")
 
     # 3) 排序：分组顺序 -> 频道自然顺序（CCTV 数字在前）
     def sort_key(e):
@@ -388,7 +488,8 @@ def build_entries(cfg: dict):
         return (gi, g, name_rank)
 
     entries.sort(key=sort_key)
-    return entries, source_stats, removed_promo
+    return entries, {"bad_lines_dropped": bad_dropped, "channels_dropped": dropped_channels}
+
 
 
 # ---------------------------------------------------------------- 输出
@@ -414,15 +515,29 @@ def write_m3u(entries, cfg, path):
         f.write(out.getvalue())
 
 
-def write_txt(entries, path):
+def write_txt(entries, path, multi_url=True):
+    """DIYP / 影视仓 txt：同一个频道有多条线路时用 # 连接，播放器会自动切线路。"""
+    reps, urls = [], {}
+    if multi_url:
+        for e in entries:
+            if e["key"] not in urls:
+                urls[e["key"]] = []
+                reps.append(e)
+            urls[e["key"]].append(e["url"])
+    else:
+        reps = entries
+
     lines = ["更新时间,#genre#", now_cn() + ","]
     current = None
-    for e in entries:
+    for e in reps:
         if e["group"] != current:
             current = e["group"]
             lines.append("")
             lines.append(f"{current},#genre#")
-        lines.append(f'{e["name"]},{e["url"]}')
+        if multi_url:
+            lines.append(f'{e["name"]},{"#".join(urls[e["key"]])}')
+        else:
+            lines.append(f'{e["name"]},{e["url"]}')
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(lines) + "\n")
@@ -496,14 +611,52 @@ def build_channel_catalog(cfg: dict, filters: dict) -> dict:
 
 
 def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="直播源聚合与清洗")
+    parser.add_argument("--no-health", action="store_true", help="跳过地址体检，直接输出")
+    parser.add_argument("--pool-only", action="store_true", help="只生成待测地址池 output/.pool.json，不输出列表")
+    args = parser.parse_args()
+
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     os.chdir(root)
     with open("config.json", encoding="utf-8") as f:
         cfg = json.load(f)
 
-    entries, source_stats, removed = build_entries(cfg)
-    if not entries:
+    candidates, source_stats, removed = build_entries(cfg)
+    if not candidates:
         log("[错误] 没有可用频道，保留上一次的输出文件不动")
+        return 1
+
+    hcfg = cfg.get("health") or {}
+    pool = build_pool(candidates, cfg)
+    pool_path = "output/.pool.json"
+    os.makedirs("output", exist_ok=True)
+    with open(pool_path, "w", encoding="utf-8", newline="\n") as f:
+        json.dump([{"key": c["key"], "name": c["name"], "url": c["url"]} for c in pool],
+                  f, ensure_ascii=False, indent=1)
+    log(f"[体检] 待测地址池 {len(pool)} 条 -> {pool_path}")
+
+    if args.pool_only:
+        return 0
+
+    health_results, health_summary = {}, None
+    if hcfg.get("enabled", True) and not args.no_health:
+        try:
+            from health import check_and_save  # 同目录模块
+            health_results, health_summary = check_and_save([c["url"] for c in pool], hcfg)
+            summary_path = hcfg.get("summary", "output/health-summary.json")
+            os.makedirs(os.path.dirname(summary_path) or ".", exist_ok=True)
+            with open(summary_path, "w", encoding="utf-8", newline="\n") as f:
+                json.dump({"checked_at": now_cn(), **health_summary}, f, ensure_ascii=False, indent=2)
+        except Exception as e:  # noqa: BLE001 体检失败不影响出列表
+            log(f"[体检] 失败，本次不做线路淘汰: {e}")
+    elif not hcfg.get("enabled", True):
+        log("[体检] 配置里已关闭")
+
+    entries, sel_stats = select_entries(candidates, cfg, health_results)
+    if not entries:
+        log("[错误] 体检后没有可用频道，本次不覆盖输出")
         return 1
 
     catalog = {}
@@ -518,12 +671,17 @@ def main():
 
     write_m3u(entries, cfg, cfg["output"]["m3u"])
     if cfg["output"].get("txt"):
-        write_txt(entries, cfg["output"]["txt"])
+        write_txt(entries, cfg["output"]["txt"],
+                  multi_url=bool(cfg["output"].get("txt_multi_url", True)))
 
     stats = {
         "updated_at": now_cn(),
         "total_channels": len(entries),
-        "removed_promo": removed,
+        "total_lines": sum(len(v) for v in candidates.values()),
+        "removed_promo": removed["promo"],
+        "removed_bad_url": removed["bad_url"],
+        "selection": sel_stats,
+        "health": health_summary,
         "groups": dict(sorted(groups.items(), key=lambda kv: -kv[1])),
         "sources": source_stats,
         "catalog": {k: catalog.get(k) for k in ("total_raw", "total_kept", "removed_promo", "groups")} if catalog else None,
@@ -531,7 +689,7 @@ def main():
     with open(cfg["output"]["stats"], "w", encoding="utf-8", newline="\n") as f:
         json.dump(stats, f, ensure_ascii=False, indent=2)
 
-    log(f"[输出] 共 {len(entries)} 个频道 -> {cfg['output']['m3u']}")
+    log(f"[输出] 共 {len(entries)} 个频道条目 -> {cfg['output']['m3u']}")
     for g, n in stats["groups"].items():
         log(f"       {g}: {n}")
     return 0
