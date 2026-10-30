@@ -107,7 +107,7 @@ schedule:
 | `output.max_per_channel` | 每个频道最多保留几条线路，`0` 表示不限（默认 0，有几条留几条） |
 | `output.txt_multi_url` | txt 里同频道多条线路用 `#` 连接（DIYP 标准写法），默认开 |
 | `output.epg` | 写入 M3U 头部的 EPG 地址 |
-| `output.variants[]` | 精简版输出：按 `groups` 白名单切出另一份列表（现在配的是 `cctv-sat` = 央视频道 + 卫视频道），可选 `name_regex` 兜底按台名匹配 |
+| `output.variants[]` | 精简版输出：按 `groups` 白名单切出另一份列表（现在配的是 `cctv-sat` = 央视频道 + 卫视频道），可选 `name_regex` 兜底按台名匹配、`exclude` 排除指定台（如 `人间卫视`/`安多卫视`）、`pinyin_groups` 让该分组按读音首字母排序 |
 | `filters.allowed_schemes` | 允许的协议，默认只留 `http`/`https`（组播 `rtp://`/`udp://` 绝大多数播放器用不了） |
 | `health.enabled` | 是否在每次更新时体检地址，默认开 |
 | `health.concurrency` / `connect_timeout` / `read_timeout` | 体检并发与超时，默认 64 / 4s / 5s |

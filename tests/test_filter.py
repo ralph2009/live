@@ -81,6 +81,25 @@ class TestChannelKey(unittest.TestCase):
         self.assertLess(build.name_rank("东方卫视"), build.name_rank("东方卫视4K"))
 
 
+class TestPinyinOrder(unittest.TestCase):
+    def test_initials(self):
+        cases = {"安徽卫视": "A", "北京卫视": "B", "东方卫视": "D", "湖南卫视": "H",
+                 "江苏卫视": "J", "内蒙古卫视": "N", "浙江卫视": "Z", "重庆卫视": "Z"}
+        for name, letter in cases.items():
+            self.assertEqual(build.pinyin_initial(name), letter, name)
+
+    def test_satellite_sorted_by_pinyin(self):
+        rows = [{"group": "卫视频道", "key": k, "name": k}
+                for k in ("浙江卫视", "安徽卫视", "湖南卫视", "北京卫视", "东方卫视")]
+        out = [e["name"] for e in build.order_by_group(rows, ["卫视频道"])]
+        self.assertEqual(out, ["安徽卫视", "北京卫视", "东方卫视", "湖南卫视", "浙江卫视"])
+
+    def test_other_groups_keep_order(self):
+        rows = [{"group": "央视频道", "key": f"CCTV{i}", "name": f"CCTV-{i}"} for i in (1, 13, 2)]
+        out = [e["key"] for e in build.order_by_group(rows, ["卫视频道"])]
+        self.assertEqual(out, ["CCTV1", "CCTV13", "CCTV2"])
+
+
 class TestGroupNormalize(unittest.TestCase):
     def test_english_groups(self):
         self.assertEqual(build.normalize_group("Movies", "x"), "电影频道")

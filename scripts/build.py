@@ -744,6 +744,70 @@ def name_rank(name: str):
     return (0 if brand else 1, len(name), name)
 
 
+# GB2312 一级汉字按拼音排序，用编码区间反查首字母（不依赖任何第三方拼音库）
+_PY_RANGES = [
+    ("A", 0xB0A1, 0xB0C4), ("B", 0xB0C5, 0xB2C0), ("C", 0xB2C1, 0xB4ED),
+    ("D", 0xB4EE, 0xB6E9), ("E", 0xB6EA, 0xB7A1), ("F", 0xB7A2, 0xB8C0),
+    ("G", 0xB8C1, 0xB9FD), ("H", 0xB9FE, 0xBBF6), ("J", 0xBBF7, 0xBFA5),
+    ("K", 0xBFA6, 0xC0AB), ("L", 0xC0AC, 0xC2E7), ("M", 0xC2E8, 0xC4C2),
+    ("N", 0xC4C3, 0xC5B5), ("O", 0xC5B6, 0xC5BD), ("P", 0xC5BE, 0xC6D9),
+    ("Q", 0xC6DA, 0xC8BA), ("R", 0xC8BB, 0xC8F5), ("S", 0xC8F6, 0xCBF9),
+    ("T", 0xCBFA, 0xCDD9), ("W", 0xCDDA, 0xCEF3), ("X", 0xCEF4, 0xD188),
+    ("Y", 0xD1B9, 0xD4D0), ("Z", 0xD4D1, 0xD7F9),
+]
+
+
+def pinyin_initial(name: str) -> str:
+    """取频道名第一个字的拼音首字母（卫视名都是汉字，够用）。"""
+    if not name:
+        return "#"
+    try:
+        code = int.from_bytes(name[0].encode("gb2312"), "big")
+    except (UnicodeEncodeError, ValueError):
+        return "#"
+    for letter, lo, hi in _PY_RANGES:
+        if lo <= code <= hi:
+            return letter
+    return "#"
+
+
+def pinyin_sort_key(name: str):
+    """按读音排：先首字母 A→Z，同字母内按 GB2312 编码（一级汉字本身就是拼音序）。"""
+    try:
+        raw = name.encode("gb2312", "replace")
+    except (LookupError, UnicodeEncodeError):
+        raw = name.encode("utf-8", "replace")
+    return (pinyin_initial(name), raw)
+
+
+def order_by_group(entries, pinyin_groups=()):
+    """把同一频道的多条线路聚在一起，分组内按指定规则排序：
+    指定了 pinyin_groups 的分组按读音首字母排，其余分组保持原顺序（央视按频道号）。
+    """
+    buckets, order = {}, []
+    for e in entries:
+        bk = (e["group"], e["key"])
+        if bk not in buckets:
+            buckets[bk] = []
+            order.append(bk)
+        buckets[bk].append(e)
+    seq = {bk: i for i, bk in enumerate(order)}
+    pinyin_groups = set(pinyin_groups or ())
+
+    def sort_key(bk):
+        g = bk[0]
+        gi = GROUP_ORDER.index(g) if g in GROUP_ORDER else len(GROUP_ORDER)
+        if g in pinyin_groups:
+            return (gi, 0, pinyin_sort_key(buckets[bk][0]["name"]))
+        return (gi, 1, "%06d" % seq[bk])
+
+    out = []
+    for bk in sorted(order, key=sort_key):
+        out.extend(buckets[bk])
+    return out
+
+
+
 def select_entries(candidates: dict, cfg: dict, health: dict):
     """结合体检结果挑最终线路：能用(ok) > 未确认(unknown/未测) > 失效(bad，默认丢弃)。"""
     hcfg = cfg.get("health") or {}
@@ -1021,6 +1085,14 @@ def main():
         sub = [e for e in entries
                if e["group"] in allow
                or (name_re and name_re.search(e["name"] + " " + e.get("tvg_name", "")))]
+        # 排除名单：按 key 比对，`人间卫视高清` 这种写法也能一起排掉
+        exclude = {channel_key(x) for x in (v.get("exclude") or [])}
+        if exclude:
+            before = len(sub)
+            sub = [e for e in sub if e["key"] not in exclude and e["name"] not in (v.get("exclude") or [])]
+            if before != len(sub):
+                log(f"[精简] 排除 {before - len(sub)} 条线路（{', '.join(v.get('exclude'))}）")
+        sub = order_by_group(sub, v.get("pinyin_groups") or ())
         vname = v.get("name") or "variant"
         if not sub:
             log(f"[精简] {vname} 没有匹配频道，跳过")

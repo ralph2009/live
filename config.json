@@ -18,7 +18,14 @@
           "卫视频道"
         ],
         "m3u": "output/cctv-sat.m3u",
-        "txt": "output/cctv-sat.txt"
+        "txt": "output/cctv-sat.txt",
+        "exclude": [
+          "人间卫视",
+          "安多卫视"
+        ],
+        "pinyin_groups": [
+          "卫视频道"
+        ]
       }
     ]
   },
