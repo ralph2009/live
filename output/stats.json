@@ -1,28 +1,35 @@
 {
-  "updated_at": "2026-10-30 12:37:12",
-  "total_channels": 4940,
+  "updated_at": "2026-10-30 12:40:46",
+  "total_channels": 4256,
   "total_lines": 4940,
   "removed_promo": 249,
   "removed_bad_url": 36,
   "selection": {
-    "bad_lines_dropped": 0,
-    "channels_dropped": 0
+    "bad_lines_dropped": 684,
+    "channels_dropped": 278
   },
   "logos": {
-    "channels_with_logo": 4933,
+    "channels_with_logo": 4249,
     "logo_index": 2549
   },
-  "health": null,
+  "health": {
+    "total": 4810,
+    "ok": 882,
+    "bad": 669,
+    "unknown": 3259,
+    "ipv6_available": false,
+    "ipv6_skipped": 1174
+  },
   "groups": {
-    "地方频道": 2545,
-    "港澳台": 912,
-    "卫视频道": 792,
-    "央视频道": 513,
-    "电影频道": 47,
-    "动画频道": 39,
-    "经典剧场": 30,
-    "体育频道": 25,
-    "纪录频道": 24,
+    "地方频道": 2074,
+    "卫视频道": 782,
+    "港澳台": 744,
+    "央视频道": 504,
+    "电影频道": 42,
+    "动画频道": 29,
+    "体育频道": 24,
+    "纪录频道": 23,
+    "经典剧场": 21,
     "音乐频道": 8,
     "游戏频道": 3,
     "少儿频道": 2
@@ -30,7 +37,7 @@
   "variants": {
     "cctv-sat": {
       "channels": 83,
-      "lines": 1297,
+      "lines": 1283,
       "groups": [
         "卫视频道",
         "央视频道"
