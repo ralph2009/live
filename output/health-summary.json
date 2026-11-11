@@ -1,9 +1,9 @@
 {
-  "checked_at": "2026-11-10 10:50:52",
-  "total": 4865,
-  "ok": 930,
-  "bad": 672,
-  "unknown": 3263,
+  "checked_at": "2026-11-11 08:45:24",
+  "total": 4869,
+  "ok": 830,
+  "bad": 673,
+  "unknown": 3366,
   "ipv6_available": false,
   "ipv6_skipped": 1174
 }
