@@ -1,11 +1,11 @@
 {
-  "updated_at": "2026-11-11 08:45:26",
+  "updated_at": "2026-11-12 09:58:50",
   "source": "http://tvlive.fengcaizb.com/channels/gqds3.gz",
-  "total_raw": 1792,
-  "total_kept": 1745,
+  "total_raw": 1791,
+  "total_kept": 1744,
   "removed_promo": 47,
   "groups": {
-    "央视频道": 35,
+    "央视频道": 34,
     "卫视频道": 34,
     "超清频道": 46,
     "广东地区": 111,
@@ -249,12 +249,6 @@
       "group": "央视频道",
       "num": 31,
       "id": "6583a0000000000000000000"
-    },
-    {
-      "title": "CCTV-NEWS",
-      "group": "央视频道",
-      "num": 32,
-      "id": "8063a0000000000000000000"
     },
     {
       "title": "CCTV-老故事",
