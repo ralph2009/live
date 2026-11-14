@@ -1,36 +1,36 @@
 {
-  "updated_at": "2026-11-13 09:15:44",
-  "total_channels": 4314,
-  "total_lines": 4990,
+  "updated_at": "2026-11-14 08:58:07",
+  "total_channels": 4308,
+  "total_lines": 4995,
   "removed_promo": 173,
   "removed_bad_url": 36,
   "selection": {
-    "bad_lines_dropped": 676,
-    "channels_dropped": 279
+    "bad_lines_dropped": 687,
+    "channels_dropped": 281
   },
   "logos": {
-    "channels_with_logo": 4307,
+    "channels_with_logo": 4301,
     "logo_index": 2549
   },
   "health": {
-    "total": 4862,
-    "ok": 840,
-    "bad": 661,
-    "unknown": 3361,
+    "total": 4867,
+    "ok": 835,
+    "bad": 672,
+    "unknown": 3360,
     "ipv6_available": false,
     "ipv6_skipped": 1174
   },
   "groups": {
-    "地方频道": 2058,
-    "卫视频道": 776,
-    "港澳台": 754,
-    "央视频道": 504,
-    "电影频道": 112,
+    "地方频道": 2053,
+    "卫视频道": 780,
+    "港澳台": 751,
+    "央视频道": 508,
+    "电影频道": 109,
     "体育频道": 25,
-    "纪录频道": 24,
+    "纪录频道": 23,
     "动画频道": 19,
-    "经典剧场": 17,
-    "少儿频道": 13,
+    "经典剧场": 16,
+    "少儿频道": 12,
     "音乐频道": 8,
     "游戏频道": 3,
     "解说频道": 1
@@ -38,7 +38,7 @@
   "variants": {
     "cctv-sat": {
       "channels": 82,
-      "lines": 1277,
+      "lines": 1285,
       "groups": [
         "卫视频道",
         "央视频道"
@@ -51,7 +51,7 @@
     {
       "source": "vbskycn-iptv4",
       "ok": true,
-      "raw": 424
+      "raw": 427
     },
     {
       "source": "guovin-iptv-api",
